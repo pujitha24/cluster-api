@@ -352,7 +352,9 @@ func (k *proxy) GetResourceNames(ctx context.Context, groupVersion, kind string,
 func listObjByGVK(ctx context.Context, c client.Client, groupVersion, kind string, options []client.ListOption) (*unstructured.UnstructuredList, error) {
 	objList := new(unstructured.UnstructuredList)
 	objList.SetAPIVersion(groupVersion)
-	objList.SetKind(kind)
+	// controller-runtime strips one trailing "List" from the kind of an UnstructuredList to get the item kind,
+	// so always append it, otherwise item kinds ending in "List" (e.g. ManagedPrefixList) are resolved wrongly.
+	objList.SetKind(kind + "List")
 
 	resourceListBackoff := newReadBackoff()
 	if err := retryWithExponentialBackoff(ctx, resourceListBackoff, func(ctx context.Context) error {

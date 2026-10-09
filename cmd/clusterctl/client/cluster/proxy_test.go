@@ -17,6 +17,7 @@ limitations under the License.
 package cluster
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -25,12 +26,36 @@ import (
 
 	. "github.com/onsi/gomega"
 	"k8s.io/client-go/rest"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	"sigs.k8s.io/cluster-api/cmd/clusterctl/internal/test"
 	"sigs.k8s.io/cluster-api/version"
 )
 
 var _ Proxy = &test.FakeProxy{}
+
+func TestListObjByGVKUsesListKind(t *testing.T) {
+	for _, kind := range []string{"Machine", "ManagedPrefixList"} {
+		t.Run(kind, func(t *testing.T) {
+			g := NewWithT(t)
+
+			var gotKind string
+			c := fake.NewClientBuilder().WithInterceptorFuncs(interceptor.Funcs{
+				List: func(_ context.Context, _ client.WithWatch, list client.ObjectList, _ ...client.ListOption) error {
+					gotKind = list.GetObjectKind().GroupVersionKind().Kind
+					return nil
+				},
+			}).Build()
+
+			_, err := listObjByGVK(t.Context(), c, "example.com/v1", kind, nil)
+			g.Expect(err).ToNot(HaveOccurred())
+			// controller-runtime strips exactly one "List" suffix to resolve the item kind.
+			g.Expect(gotKind).To(Equal(kind + "List"))
+		})
+	}
+}
 
 func TestProxyGetConfig(t *testing.T) {
 	t.Run("GetConfig", func(t *testing.T) {
